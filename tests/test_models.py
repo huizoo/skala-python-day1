@@ -30,7 +30,7 @@ def test_weather_record_invalid_precipitation() -> None:
                 "precipitation_probability": 150,
             }
         )
-    
+
 
 def test_location_record_invalid_latitude() -> None:
     """위도가 허용 범위를 벗어나면 검증에 실패하는지 확인한다."""

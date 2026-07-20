@@ -37,6 +37,7 @@ from dotenv import load_dotenv
 ENV_PATH = Path(__file__).with_name(".env")
 load_dotenv(ENV_PATH)
 
+
 def get_required_env(name: str) -> str:
     """필수 환경변수가 없거나 비어 있으면 오류를 발생시킨다."""
     value = os.getenv(name)
@@ -45,6 +46,7 @@ def get_required_env(name: str) -> str:
         raise ValueError(f"필수 환경변수가 없습니다: {name}")
 
     return value
+
 
 OUTPUT_DIR = Path(__file__).with_name("output")
 CSV_PATH = OUTPUT_DIR / "collected_data.csv"
@@ -56,7 +58,7 @@ if __name__ == "__main__":
             collect_all(
                 get_required_env("OPEN_METEO_URL"),
                 get_required_env("COUNTRIES_URL"),
-                get_required_env("IP_API_URL")
+                get_required_env("IP_API_URL"),
             )
         )
 
@@ -73,8 +75,6 @@ if __name__ == "__main__":
             PARQUET_PATH,
         )
 
-        
-
         print("\n-------------------- 파일 저장 결과 --------------------")
         print(f"CSV 저장 완료: {CSV_PATH.name}")
         print(f"Parquet 저장 완료: {PARQUET_PATH.name}")
@@ -84,17 +84,12 @@ if __name__ == "__main__":
         print(f"CSV 쓰기 시간: {csv_write_time:.6f}초")
         print(f"Parquet 쓰기 시간: {parquet_write_time:.6f}초")
 
-
         (
             reloaded_csv,
             reloaded_parquet,
             csv_read_time,
             parquet_read_time,
-        ) = reload_records(
-            CSV_PATH,
-            PARQUET_PATH
-        )
-
+        ) = reload_records(CSV_PATH, PARQUET_PATH)
 
         required_columns = {
             "country",
@@ -112,7 +107,7 @@ if __name__ == "__main__":
         print("\n-------------------- 재로딩 검증 시작 --------------------")
 
         assert len(records) == 72, "3일간 시간대별 데이터는 72건이어야 합니다."
-        
+
         validate_reloaded(
             data_frame,
             reloaded_csv,
@@ -129,10 +124,7 @@ if __name__ == "__main__":
         print(f"Parquet 읽기 시간: {parquet_read_time:.6f}초")
 
         print("\n-------------------- 전체 성능 측정 결과 --------------------")
-        print(
-            f"CSV     - 쓰기: {csv_write_time:.6f}초, "
-            f"읽기: {csv_read_time:.6f}초"
-        )
+        print(f"CSV     - 쓰기: {csv_write_time:.6f}초, 읽기: {csv_read_time:.6f}초")
         print(
             f"Parquet - 쓰기: {parquet_write_time:.6f}초, "
             f"읽기: {parquet_read_time:.6f}초"
@@ -152,7 +144,6 @@ if __name__ == "__main__":
         print(f"쓰기 속도가 더 빠른 형식: {faster_write_format}")
         print(f"읽기 속도가 더 빠른 형식: {faster_read_format}")
 
-
     except ValidationError as error:
         print("\nPydantic 검증 오류")
 
@@ -165,7 +156,7 @@ if __name__ == "__main__":
 
     except KeyError as error:
         print(f"필수 응답 필드가 없습니다: {error}")
-    
+
     except OSError as error:
         print(f"파일 처리 오류: {error}")
 

@@ -65,9 +65,17 @@ def validate_reloaded(
     """재로딩한 파일의 데이터 개수와 컬럼을 검증한다."""
     assert len(reloaded_csv) == len(original), "CSV의 데이터 개수가 다릅니다."
     assert len(reloaded_parquet) == len(original), "Parquet의 데이터 개수가 다릅니다."
-    
-    assert set(reloaded_csv.columns) == set(original.columns), "CSV의 컬럼이 원본과 다릅니다."
-    assert set(reloaded_parquet.columns) == set(original.columns), "Parquet의 컬럼이 원본과 다릅니다."
 
-    assert required_columns.issubset(reloaded_csv.columns), "CSV에 필수 컬럼이 없습니다."
-    assert required_columns.issubset(reloaded_parquet.columns), "Parquet에 필수 컬럼이 없습니다."
+    assert set(reloaded_csv.columns) == set(original.columns), (
+        "CSV의 컬럼이 원본과 다릅니다."
+    )
+    assert set(reloaded_parquet.columns) == set(original.columns), (
+        "Parquet의 컬럼이 원본과 다릅니다."
+    )
+
+    assert required_columns.issubset(reloaded_csv.columns), (
+        "CSV에 필수 컬럼이 없습니다."
+    )
+    assert required_columns.issubset(reloaded_parquet.columns), (
+        "Parquet에 필수 컬럼이 없습니다."
+    )

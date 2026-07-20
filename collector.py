@@ -19,7 +19,7 @@ async def fetch_json(
 
     if not isinstance(data, dict):
         raise TypeError(f"{source} 응답이 JSON 객체 형식이 아닙니다.")
-    
+
     print(f"{source} 수집 완료: HTTP {response.status_code}")
 
     return source, data
@@ -44,4 +44,3 @@ async def collect_all(
         )
 
     return dict(results)
-
