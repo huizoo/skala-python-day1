@@ -27,9 +27,9 @@ import os
 from pathlib import Path
 from pydantic import ValidationError
 
-from models import CountryRecord, LocationRecord, WeatherRecord
 from collector import collect_all
 from storage import reload_records, save_records, validate_reloaded
+from transformer import transform_records
 
 import httpx
 from dotenv import load_dotenv
@@ -55,56 +55,7 @@ if __name__ == "__main__":
             )
         )
 
-        weather_data = collected_data["Open-Meteo"]
-        country_data = collected_data["Countries.dev"]
-        location_data = collected_data["ip-api"]
-
-        hourly_data = weather_data["hourly"]
-
-        country_record = CountryRecord.model_validate(
-            {
-                "country": country_data["name"],
-                "capital": country_data["capital"],
-                "region": country_data["region"],
-            }
-        )
-
-        location_record = LocationRecord.model_validate(
-            {
-                "ip": location_data["query"],
-                "city": location_data["city"],
-                "latitude": location_data["lat"],
-                "longitude": location_data["lon"],
-            }
-        )
-
-        weather_records = [
-            WeatherRecord.model_validate(
-                {
-                    "time": time,
-                    "temperature": temperature,
-                    "precipitation_probability": precipitation,
-                }
-            )
-            for time, temperature, precipitation in zip(
-                hourly_data["time"],
-                hourly_data["temperature_2m"],
-                hourly_data["precipitation_probability"],
-                strict=True,
-            )
-        ]
-
-        country_values = country_record.model_dump(mode="json")
-        location_values = location_record.model_dump(mode="json")
-
-        records = [
-            {
-                **country_values,
-                **location_values,
-                **weather_record.model_dump(mode="json"),
-            }
-            for weather_record in weather_records
-        ]
+        records = transform_records(collected_data)
 
         print("\n-------------------- Pydantic 검증 결과 --------------------")
         print(f"검증 완료: {len(records)}건")
