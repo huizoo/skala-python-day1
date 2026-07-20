@@ -25,12 +25,11 @@
 import asyncio
 import os
 from pathlib import Path
-from time import perf_counter
-import pandas as pd
 from pydantic import ValidationError
 
 from models import CountryRecord, LocationRecord, WeatherRecord
 from collector import collect_all
+from storage import reload_records, save_records, validate_reloaded
 
 import httpx
 from dotenv import load_dotenv
@@ -112,25 +111,13 @@ if __name__ == "__main__":
         print("첫 번째 레코드:", records[0])
         print("마지막 레코드:", records[-1])
 
-
-        OUTPUT_DIR.mkdir(exist_ok=True)
-
-        data_frame = pd.DataFrame(records)
-
-        csv_write_start = perf_counter()
-        data_frame.to_csv(
+        data_frame, csv_write_time, parquet_write_time = save_records(
+            records,
             CSV_PATH,
-            index=False,
-            encoding="utf-8-sig",
-        )
-        csv_write_time = perf_counter() - csv_write_start
-
-        parquet_write_start = perf_counter()
-        data_frame.to_parquet(
             PARQUET_PATH,
-            index=False,
         )
-        parquet_write_time = perf_counter() - parquet_write_start
+
+        
 
         print("\n-------------------- 파일 저장 결과 --------------------")
         print(f"CSV 저장 완료: {CSV_PATH.name}")
@@ -141,13 +128,17 @@ if __name__ == "__main__":
         print(f"CSV 쓰기 시간: {csv_write_time:.6f}초")
         print(f"Parquet 쓰기 시간: {parquet_write_time:.6f}초")
 
-        csv_read_start = perf_counter()
-        reloaded_csv = pd.read_csv(CSV_PATH)
-        csv_read_time = perf_counter() - csv_read_start
 
-        parquet_read_start = perf_counter()
-        reloaded_parquet = pd.read_parquet(PARQUET_PATH)
-        parquet_read_time = perf_counter() - parquet_read_start
+        (
+            reloaded_csv,
+            reloaded_parquet,
+            csv_read_time,
+            parquet_read_time,
+        ) = reload_records(
+            CSV_PATH,
+            PARQUET_PATH
+        )
+
 
         required_columns = {
             "country",
@@ -166,14 +157,12 @@ if __name__ == "__main__":
 
         assert len(records) == 72, "3일간 시간대별 데이터는 72건이어야 합니다."
         
-        assert len(reloaded_csv) == len(data_frame), "CSV의 데이터 개수가 다릅니다."
-        assert len(reloaded_parquet) == len(data_frame), "Parquet의 데이터 개수가 다릅니다."
-
-        assert set(reloaded_csv.columns) == set(data_frame.columns), "CSV의 컬럼이 원본과 다릅니다."
-        assert set(reloaded_parquet.columns) == set(data_frame.columns), "Parquet의 컬럼이 원본과 다릅니다."
-        
-        assert required_columns.issubset(reloaded_csv.columns), "CSV에 필수 컬럼이 없습니다."
-        assert required_columns.issubset(reloaded_parquet.columns), "Parquet에 필수 컬럼이 없습니다."
+        validate_reloaded(
+            data_frame,
+            reloaded_csv,
+            reloaded_parquet,
+            required_columns,
+        )
 
         print("CSV·Parquet 데이터 개수 확인 완료")
         print("CSV·Parquet 컬럼 확인 완료")
