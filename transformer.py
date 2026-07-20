@@ -13,6 +13,11 @@ def transform_records(
     country_data = collected_data["Countries.dev"]
     location_data = collected_data["ip-api"]
 
+    # ip-api는 HTTP 200이어도 JSON 내부의 status가 "fail"일 수 있기 때문에 검증이 필요
+    if location_data.get("status") != "success":
+        message = location_data.get("message", "원인을 확인할 수 없습니다.")
+        raise ValueError(f"ip-api 응답 실패: {message}")
+
     hourly_data = weather_data["hourly"]
 
     country_record = CountryRecord.model_validate(

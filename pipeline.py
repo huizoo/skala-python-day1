@@ -37,9 +37,14 @@ from dotenv import load_dotenv
 ENV_PATH = Path(__file__).with_name(".env")
 load_dotenv(ENV_PATH)
 
-OPEN_METEO_URL = os.environ["OPEN_METEO_URL"]
-COUNTRIES_URL = os.environ["COUNTRIES_URL"]
-IP_API_URL = os.environ["IP_API_URL"]
+def get_required_env(name: str) -> str:
+    """필수 환경변수가 없거나 비어 있으면 오류를 발생시킨다."""
+    value = os.getenv(name)
+
+    if not value:
+        raise ValueError(f"필수 환경변수가 없습니다: {name}")
+
+    return value
 
 OUTPUT_DIR = Path(__file__).with_name("output")
 CSV_PATH = OUTPUT_DIR / "collected_data.csv"
@@ -49,9 +54,9 @@ if __name__ == "__main__":
     try:
         collected_data = asyncio.run(
             collect_all(
-                OPEN_METEO_URL,
-                COUNTRIES_URL,
-                IP_API_URL,
+                get_required_env("OPEN_METEO_URL"),
+                get_required_env("COUNTRIES_URL"),
+                get_required_env("IP_API_URL")
             )
         )
 
@@ -142,6 +147,12 @@ if __name__ == "__main__":
 
     except httpx.HTTPError as error:
         print(f"API 요청 오류: {error}")
+
+    except KeyError as error:
+        print(f"필수 응답 필드가 없습니다: {error}")
+    
+    except OSError as error:
+        print(f"파일 처리 오류: {error}")
 
     except (TypeError, ValueError) as error:
         print(f"응답 처리 오류: {error}")
