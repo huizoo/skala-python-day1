@@ -12,14 +12,29 @@
     CSV와 Parquet으로 저장해 읽기·쓰기 성능을 비교한다.
 
 입력 데이터:
-    Open-Meteo, Countries.dev, ip-api의 JSON 응답
+    .env에 설정한 Open-Meteo, Countries.dev, ip-api의 JSON 응답
 
-주요 처리 과정:
-    비동기 API 수집, 스키마 검증, 데이터 저장 및 재로딩,
-    CSV와 Parquet의 읽기·쓰기 시간 측정
+구현 내용:
+    1. asyncio.gather()로 세 API를 동시에 수집한다.
+    2. 필요한 필드를 추출하고 Pydantic v2 모델로 검증한다.
+    3. 검증된 데이터를 CSV와 Parquet으로 저장하고 다시 읽는다.
+    4. 두 파일 형식의 읽기·쓰기 시간을 측정하고 결과를 비교한다.
+
+파일 구성:
+    collector.py: 비동기 API 수집
+    models.py: Pydantic 검증 모델
+    transformer.py: 응답 필드 추출 및 레코드 변환
+    storage.py: CSV·Parquet 저장, 재로딩 및 검증
+    tests/test_models.py: Pydantic 모델 검증 테스트
+
+변경 사항:
+    한 파일에 작성했던 기능을 역할별 모듈로 분리하고,
+    환경변수·API 응답·파일 처리 예외와 pytest 검증을 추가했다.
 
 출력 결과:
-    검증된 CSV·Parquet 파일과 형식별 성능 측정 결과
+    output/collected_data.csv
+    output/collected_data.parquet
+    형식별 읽기·쓰기 성능 측정 및 재로딩 검증 결과
 """
 
 import asyncio
@@ -54,6 +69,7 @@ PARQUET_PATH = OUTPUT_DIR / "collected_data.parquet"
 
 if __name__ == "__main__":
     try:
+        # asyncio.gather를 활용하여 3개의 API를 동시에 수집
         collected_data = asyncio.run(
             collect_all(
                 get_required_env("OPEN_METEO_URL"),
@@ -62,6 +78,7 @@ if __name__ == "__main__":
             )
         )
 
+        # 필요한 필드를 추출하고 Pydantic 모델로 검증
         records = transform_records(collected_data)
 
         print("\n-------------------- Pydantic 검증 결과 --------------------")
@@ -69,6 +86,7 @@ if __name__ == "__main__":
         print("첫 번째 레코드:", records[0])
         print("마지막 레코드:", records[-1])
 
+        # 검증된 동일 데이터를 CSV와 Parquet으로 저장
         data_frame, csv_write_time, parquet_write_time = save_records(
             records,
             CSV_PATH,
@@ -84,6 +102,7 @@ if __name__ == "__main__":
         print(f"CSV 쓰기 시간: {csv_write_time:.6f}초")
         print(f"Parquet 쓰기 시간: {parquet_write_time:.6f}초")
 
+        # 저장한 두 파일을 다시 불러와 읽기 시간 측정
         (
             reloaded_csv,
             reloaded_parquet,
@@ -106,6 +125,7 @@ if __name__ == "__main__":
 
         print("\n-------------------- 재로딩 검증 시작 --------------------")
 
+        # 실제 수집 건수와 재로딩 데이터의 건수 및 컬럼 확인
         assert len(records) == 72, "3일간 시간대별 데이터는 72건이어야 합니다."
 
         validate_reloaded(
@@ -130,6 +150,7 @@ if __name__ == "__main__":
             f"읽기: {parquet_read_time:.6f}초"
         )
 
+        # 측정 결과를 비교하여 더 빠른 파일 형식 확인
         if csv_write_time < parquet_write_time:
             faster_write_format = "CSV"
         else:
