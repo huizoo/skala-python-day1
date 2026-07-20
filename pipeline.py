@@ -138,6 +138,21 @@ if __name__ == "__main__":
             f"읽기: {parquet_read_time:.6f}초"
         )
 
+        if csv_write_time < parquet_write_time:
+            faster_write_format = "CSV"
+        else:
+            faster_write_format = "Parquet"
+
+        if csv_read_time < parquet_read_time:
+            faster_read_format = "CSV"
+        else:
+            faster_read_format = "Parquet"
+
+        print("\n-------------------- 성능 비교 분석 --------------------")
+        print(f"쓰기 속도가 더 빠른 형식: {faster_write_format}")
+        print(f"읽기 속도가 더 빠른 형식: {faster_read_format}")
+
+
     except ValidationError as error:
         print("\nPydantic 검증 오류")
 
