@@ -18,23 +18,26 @@
     1. asyncio.gather()로 세 API를 동시에 수집한다.
     2. 필요한 필드를 추출하고 Pydantic v2 모델로 검증한다.
     3. 검증된 데이터를 CSV와 Parquet으로 저장하고 다시 읽는다.
-    4. 두 파일 형식의 읽기·쓰기 시간을 측정하고 결과를 비교한다.
+    4. 두 파일 형식의 읽기·쓰기를 5회 반복해 평균·표준편차·최솟값을 비교한다.
+    5. 작업별 최대 메모리 증가량, DataFrame 메모리와 파일 크기를 비교한다.
 
 파일 구성:
     collector.py: 비동기 API 수집
     models.py: Pydantic 검증 모델
     transformer.py: 응답 필드 추출 및 레코드 변환
-    storage.py: CSV·Parquet 저장, 재로딩 및 검증
+    storage.py: CSV·Parquet 저장, 재로딩, 검증 및 성능·메모리 측정
     tests/test_models.py: Pydantic 모델 검증 테스트
+    tests/test_storage.py: 반복 성능 측정과 저장 용량 테스트
 
 변경 사항:
     한 파일에 작성했던 기능을 역할별 모듈로 분리하고,
     환경변수·API 응답·파일 처리 예외와 pytest 검증을 추가했다.
+    반복 실행 통계와 메모리·파일 크기 비교를 추가했다.
 
 출력 결과:
     output/collected_data.csv
     output/collected_data.parquet
-    형식별 읽기·쓰기 성능 측정 및 재로딩 검증 결과
+    형식별 평균 읽기·쓰기 성능, 메모리·파일 크기 및 재로딩 검증 결과
 """
 
 import asyncio
@@ -43,7 +46,13 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from collector import collect_all
-from storage import reload_records, save_records, validate_reloaded
+from storage import (
+    benchmark_storage,
+    reload_records,
+    save_records,
+    storage_usage,
+    validate_reloaded,
+)
 from transformer import transform_records
 
 import httpx
@@ -98,7 +107,7 @@ if __name__ == "__main__":
         print(f"Parquet 저장 완료: {PARQUET_PATH.name}")
         print(f"저장 데이터: {len(data_frame)}행 × {len(data_frame.columns)}열")
 
-        print("\n-------------------- 쓰기 성능 비교 --------------------")
+        print("\n-------------------- 단일 쓰기 측정 --------------------")
         print(f"CSV 쓰기 시간: {csv_write_time:.6f}초")
         print(f"Parquet 쓰기 시간: {parquet_write_time:.6f}초")
 
@@ -139,24 +148,51 @@ if __name__ == "__main__":
         print("CSV·Parquet 컬럼 확인 완료")
         print("-------------------- 재로딩 검증 통과 --------------------")
 
-        print("\n-------------------- 읽기 성능 비교 --------------------")
+        print("\n-------------------- 단일 읽기 측정 --------------------")
         print(f"CSV 읽기 시간: {csv_read_time:.6f}초")
         print(f"Parquet 읽기 시간: {parquet_read_time:.6f}초")
 
-        print("\n-------------------- 전체 성능 측정 결과 --------------------")
-        print(f"CSV     - 쓰기: {csv_write_time:.6f}초, 읽기: {csv_read_time:.6f}초")
+        # 같은 작업을 반복하여 평균·표준편차·최솟값과 메모리 사용량 측정
+        repeat_count = 5
+        performance_results = benchmark_storage(
+            data_frame,
+            CSV_PATH,
+            PARQUET_PATH,
+            repeats=repeat_count,
+        )
+
+        print(f"\n-------------------- {repeat_count}회 반복 성능 측정 --------------------")
+        for operation, stats in performance_results.items():
+            print(
+                f"{operation}: 평균 {stats.average_seconds:.6f}초, "
+                f"표준편차 {stats.standard_deviation_seconds:.6f}초, "
+                f"최솟값 {stats.minimum_seconds:.6f}초, "
+                f"최대 메모리 증가 {stats.peak_memory_increase_mib:.3f}MiB"
+            )
+
+        # DataFrame 메모리와 생성된 파일의 저장 크기 확인
+        usage_results = storage_usage(data_frame, CSV_PATH, PARQUET_PATH)
+        print("\n-------------------- 메모리·파일 크기 비교 --------------------")
+        print(f"DataFrame 메모리: {usage_results['DataFrame 메모리'] / 1024:.2f}KiB")
+        print(f"CSV 파일 크기: {usage_results['CSV 파일 크기'] / 1024:.2f}KiB")
         print(
-            f"Parquet - 쓰기: {parquet_write_time:.6f}초, "
-            f"읽기: {parquet_read_time:.6f}초"
+            f"Parquet 파일 크기: "
+            f"{usage_results['Parquet 파일 크기'] / 1024:.2f}KiB"
         )
 
         # 측정 결과를 비교하여 더 빠른 파일 형식 확인
-        if csv_write_time < parquet_write_time:
+        if (
+            performance_results["CSV 쓰기"].average_seconds
+            < performance_results["Parquet 쓰기"].average_seconds
+        ):
             faster_write_format = "CSV"
         else:
             faster_write_format = "Parquet"
 
-        if csv_read_time < parquet_read_time:
+        if (
+            performance_results["CSV 읽기"].average_seconds
+            < performance_results["Parquet 읽기"].average_seconds
+        ):
             faster_read_format = "CSV"
         else:
             faster_read_format = "Parquet"

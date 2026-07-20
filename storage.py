@@ -1,10 +1,99 @@
 """CSV와 Parquet 파일의 저장, 재로딩 및 검증 기능을 제공한다."""
 
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
+from statistics import mean, pstdev
 from time import perf_counter
-from typing import Any
+from typing import Any, TypeVar
 
 import pandas as pd
+from memory_profiler import memory_usage
+
+T = TypeVar("T")
+
+
+@dataclass(frozen=True)
+class PerformanceStats:
+    """반복 실행 시간과 최대 메모리 증가량을 담는다."""
+
+    average_seconds: float
+    standard_deviation_seconds: float
+    minimum_seconds: float
+    peak_memory_increase_mib: float
+
+
+def measure_performance(
+    operation: Callable[[], T],
+    repeats: int = 5,
+) -> tuple[T, PerformanceStats]:
+    """함수를 반복 측정하고 실행 시간 통계와 최대 메모리 증가량을 반환한다."""
+    if repeats < 2:
+        raise ValueError("반복 횟수는 2 이상이어야 합니다.")
+
+    # 최초 실행 준비 비용이 평균에 섞이지 않도록 준비 실행
+    operation()
+
+    elapsed_times: list[float] = []
+    result: T
+    for _ in range(repeats):
+        started = perf_counter()
+        result = operation()
+        elapsed_times.append(perf_counter() - started)
+
+    samples, result = memory_usage(
+        (operation, (), {}),
+        interval=0.01,
+        retval=True,
+        max_usage=False,
+    )
+    peak_memory_increase = max(samples) - min(samples) if samples else 0.0
+
+    return result, PerformanceStats(
+        average_seconds=mean(elapsed_times),
+        standard_deviation_seconds=pstdev(elapsed_times),
+        minimum_seconds=min(elapsed_times),
+        peak_memory_increase_mib=peak_memory_increase,
+    )
+
+
+def benchmark_storage(
+    data_frame: pd.DataFrame,
+    csv_path: Path,
+    parquet_path: Path,
+    repeats: int = 5,
+) -> dict[str, PerformanceStats]:
+    """CSV와 Parquet 읽기·쓰기를 같은 횟수로 반복 측정한다."""
+    operations: dict[str, Callable[[], object]] = {
+        "CSV 쓰기": lambda: data_frame.to_csv(
+            csv_path,
+            index=False,
+            encoding="utf-8-sig",
+        ),
+        "Parquet 쓰기": lambda: data_frame.to_parquet(
+            parquet_path,
+            index=False,
+        ),
+        "CSV 읽기": lambda: pd.read_csv(csv_path),
+        "Parquet 읽기": lambda: pd.read_parquet(parquet_path),
+    }
+    return {
+        name: measure_performance(operation, repeats=repeats)[1]
+        for name, operation in operations.items()
+    }
+
+
+def storage_usage(
+    data_frame: pd.DataFrame,
+    csv_path: Path,
+    parquet_path: Path,
+) -> dict[str, int]:
+    """DataFrame 메모리와 CSV·Parquet 파일 크기를 바이트 단위로 반환한다."""
+    return {
+        "DataFrame 메모리": int(data_frame.memory_usage(deep=True).sum()),
+        "CSV 파일 크기": csv_path.stat().st_size,
+        "Parquet 파일 크기": parquet_path.stat().st_size,
+    }
 
 
 def save_records(
